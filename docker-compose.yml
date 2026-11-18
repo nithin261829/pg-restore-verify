@@ -1,0 +1,44 @@
+services:
+  source:
+    image: postgres:16
+    environment: {POSTGRES_PASSWORD: postgres, POSTGRES_DB: app}
+    ports: ["5432:5432"]
+    healthcheck: {test: ["CMD", "pg_isready", "-U", "postgres"], interval: 2s, retries: 30}
+  scratch:
+    image: postgres:16
+    environment: {POSTGRES_PASSWORD: postgres}
+    ports: ["5433:5432"]
+    healthcheck: {test: ["CMD", "pg_isready", "-U", "postgres"], interval: 2s, retries: 30}
+  s3:
+    image: adobe/s3mock:3.12.0
+    environment: {initialBuckets: backups}
+    ports: ["9090:9090"]
+  pgrv:
+    build: .
+    depends_on:
+      source: {condition: service_healthy}
+      scratch: {condition: service_healthy}
+      s3: {condition: service_started}
+    environment:
+      PGRV_SOURCE_DSN: postgresql://postgres:postgres@source:5432/app
+      PGRV_SCRATCH_DSN: postgresql://postgres:postgres@scratch:5432/postgres
+      PGRV_STORE: s3://backups/app
+      PGRV_S3_ENDPOINT: http://s3:9090
+      AWS_ACCESS_KEY_ID: test
+      AWS_SECRET_ACCESS_KEY: test
+      AWS_DEFAULT_REGION: us-east-1
+      PGRV_CATALOG: /data/catalog.db
+    volumes: ["catalog:/data"]
+    ports: ["8080:8080"]
+  tests:
+    build: .
+    profiles: [test]
+    depends_on:
+      source: {condition: service_healthy}
+      scratch: {condition: service_healthy}
+    environment:
+      PGRV_TEST_SOURCE_ADMIN: postgresql://postgres:postgres@source:5432/postgres
+      PGRV_TEST_SCRATCH: postgresql://postgres:postgres@scratch:5432/postgres
+    entrypoint: ["pytest", "-q"]
+volumes:
+  catalog: {}

@@ -1,0 +1,20 @@
+groups:
+  - name: pg-restore-verify
+    rules:
+      - alert: PostgresBackupTooOld
+        expr: time() - pgrv_last_backup_timestamp_seconds > 26 * 3600
+        for: 10m
+        labels: {severity: page}
+        annotations:
+          summary: No PostgreSQL backup in the last 26 hours
+      - alert: PostgresRestoreTestFailed
+        expr: pgrv_last_verification_success == 0
+        labels: {severity: page}
+        annotations:
+          summary: The latest backup did not restore cleanly; run `pgrv verify` and check the problems list
+      - alert: PostgresRestoreTestMissing
+        expr: time() - pgrv_last_verification_timestamp_seconds > 26 * 3600
+        for: 10m
+        labels: {severity: ticket}
+        annotations:
+          summary: No restore test in the last 26 hours
